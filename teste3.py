@@ -6,7 +6,9 @@ class Node:
         self.c2 = right
         self.firstpos = set()
         self.lastpos = set()
+        self.followpos = set()
         self.nullable = None
+        self.number = None
 
 def regex_to_tree(expression):
     aux = expression[-1] == '*'
@@ -24,18 +26,23 @@ def regex_to_tree(expression):
     numerar(tree, nodos_folha)
     
     for i in range(len(nodos_folha)):
+        nodos_folha[i].number = i + 1
         nodos_folha[i].firstpos.add(i + 1)
         nodos_folha[i].lastpos.add(i + 1)
     
     get_nullable(tree)
     root = find_root(tree)
-    print("Yeah!")
+
+    for i in nodos_folha:
+        followpos(tree, i)
+    
+    montar_automato(nodos_folha, root)
 
 def parse(expression):
     i = len(expression) - 1
     next = None
 
-    while i >= 0: # a|b
+    while i >= 0: 
         if expression[i] == "|":
             nodo = Node(expression[i], None, next)
             next.parent = nodo
@@ -74,7 +81,7 @@ def parse(expression):
                 if tmp_parent is not None:
                     tmp_parent.c1 = concat
             else:
-                nodo.c2 = tmp
+                nodo.c2 = tmp # problema está aqui
             next = nodo
         i -= 1
     
@@ -139,7 +146,7 @@ def firstpos(n):
             # return firstpos(n.c1).union(firstpos(n.c2))
     elif n.c1 == None and n.c2 == None:
         if n.value == '&':
-            return {}
+            return set()
         elif n.value.isalpha() or n.value == '#':
             return n.firstpos
     return n.firstpos
@@ -161,17 +168,89 @@ def lastpos(n):
             # return lastpos(n.c1).union(lastpos(n.c2))
     elif n.c1 == None and n.c2 == None:
         if n.value == '&':
-            return {}
+            return set()
         elif n.value.isalpha() or n.value == '#':
             return n.lastpos
     return n.lastpos
 
 def find_root(tree):
-    while tree.value == '.':
+    while tree.c1.value == '.':
         tree = tree.c1
     return tree
 
-regex_to_tree("aab*")
+def followpos(tree, n):
+    if tree is None:
+        return
+    
+    if n.value == '#':
+        return set()
+    
+    followpos(tree.c1, n)
+    if tree.value == '.':
+        # if tree.c1.lastpos.contains(n.number):
+        if n.number in tree.c1.lastpos:
+            n.followpos = n.followpos.union(tree.c2.firstpos)
+    elif tree.value == '*':
+        # if tree.lastpos.contains(n.number):
+        if n.number in tree.lastpos:
+            n.followpos = n.followpos.union(tree.firstpos)
+    followpos(tree.c2, n)
+
+def formatar_listas_estados(lista):
+    lista_final = []
+    for i in lista:
+        lista_final.append('{' + formatar_set(i) + '}')
+    return ",".join(lista_final)
+
+def formatar_set(conjunto):
+    return ",".join(map(str, sorted(list(conjunto))))
+
+def formatar_transicoes(transicoes):
+    transicoes_str = []
+    lista_transicoes = list(transicoes)
+    lista_transicoes = sorted(lista_transicoes, key=lambda x : formatar_set(x[0]))
+    for i in lista_transicoes:
+        aux = f"{{{formatar_set(i[0])}}},{i[1]},{{{formatar_set(i[2])}}}"
+        transicoes_str.append(aux)
+    return transicoes_str
+
+def montar_automato(nodos_folha, root):
+    estados = []
+    alfabeto = set()
+    estado_inicial = root.firstpos
+    estados.append(estado_inicial)
+    transicoes = []
+    estados_finais = []
+
+    for i in nodos_folha:
+        if i.value != '&' and i.value != '#':
+            alfabeto.add(i.value)
+    
+    for i in estados:
+        for k in alfabeto:
+            novo_estado = set()
+            for j in i:
+                if j == len(nodos_folha):
+                    if i not in estados_finais:
+                        estados_finais.append(i)
+                if nodos_folha[j - 1].value == k:
+                    novo_estado = novo_estado.union(nodos_folha[j - 1].followpos)
+            if novo_estado not in estados and len(novo_estado) > 0:
+                estados.append(novo_estado)
+            if (i,k,novo_estado) not in transicoes and len(novo_estado) > 0:
+                transicoes.append((i,k,novo_estado))
+    
+    transicoes_str = formatar_transicoes(transicoes)
+    # print(f"{len(estados)}")
+    # print(f"{formatar_set(estado_inicial)}")
+    # print(f"{formatar_listas_estados(estados_finais)}")
+    # print(f"{','.join(sorted(list(alfabeto)))}")
+    # print(f"{';'.join(transicoes_str)}")
+    print(f"{len(estados)};{{{formatar_set(estado_inicial)}}};{{{','.join({formatar_listas_estados(estados_finais)})}}};{{{','.join(sorted(list(alfabeto)))}}};{';'.join(transicoes_str)}")
+
+# regex_to_tree("aab*")
+# regex_to_tree("aa*(bb*aa*b)*")
+regex_to_tree("(&|b)(ab)*(&|a)")
 # parse("a*b")
 # regex_to_tree("a*b")
 # parse("ab")
